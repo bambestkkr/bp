@@ -332,7 +332,7 @@
 
                     <!-- Big Save Button -->
                     <button type="submit" id="btnSubmit" class="w-full py-4 rounded-2xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xl shadow-lg transition active:scale-[0.99] flex items-center justify-center gap-3 touch-target">
-                        <i class="fa-solid fa-cloud-arrow-up text-2xl"></i> บันทึกข้อมูลเข้า Google Sheet
+                        <i class="fa-solid fa-cloud-arrow-up text-2xl"></i> บันทึก
                     </button>
 
                 </form>
@@ -722,7 +722,7 @@
                 <i class="fa-solid fa-key"></i>
             </div>
             <h3 id="pinModalTitle" class="font-bold text-lg text-slate-800 mb-1">ยืนยันรหัสผ่านความปลอดภัย</h3>
-            <p class="text-xs text-slate-500 mb-4">กรุณากรอกรหัสผ่านเพื่ออนุมัติการทำรายการ Backup / Restore</p>
+            <p class="text-xs text-slate-500 mb-4">กรุณากรอกรหัสผ่านเพื่ออนุมัติการทำรายการ Backup / Restore / Delete</p>
             
             <input type="password" id="pinInput" maxlength="12" placeholder="กรอกรหัสผ่าน..." class="w-full text-center text-xl font-bold tracking-widest p-3 rounded-2xl border-2 border-slate-300 focus:border-purple-600 focus:outline-none mb-4">
             
@@ -808,6 +808,58 @@
             return `${day} ${month} ${year}`;
         }
 
+        // Helper: Format Compact Date & Time for Doctor Report Table (e.g. 31/10/69 14:00)
+        function formatCompactDateTime(dateVal, timeVal) {
+            if (!dateVal && !timeVal) return '-';
+
+            let time = timeVal ? String(timeVal).trim().slice(0, 5) : '';
+            let str = String(dateVal || '').trim();
+
+            // Strip trailing English day names or timezone strings (e.g., "Sun D", "Mon D", "GMT+0700")
+            str = str.replace(/\s+(Sun|Mon|Tue|Wed|Thu|Fri|Sat|GMT|Indochina).*$/i, '').trim();
+
+            // Try parsing directly with JavaScript Date object first
+            let d = new Date(str);
+            if (!isNaN(d.getTime()) && d.getFullYear() > 1990) {
+                const day = String(d.getDate()).padStart(2, '0');
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const year = String(d.getFullYear() + 543).slice(-2);
+                if (!time && (d.getHours() > 0 || d.getMinutes() > 0)) {
+                    time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                }
+                return `${day}/${month}/${year}${time ? ' ' + time : ''}`.trim();
+            }
+
+            // Match YYYY-MM-DD
+            const ymdMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+            if (ymdMatch) {
+                let yNum = parseInt(ymdMatch[1], 10);
+                if (yNum < 2500) yNum += 543;
+                const year = String(yNum).slice(-2);
+                const month = ymdMatch[2].padStart(2, '0');
+                const day = ymdMatch[3].padStart(2, '0');
+                return `${day}/${month}/${year}${time ? ' ' + time : ''}`.trim();
+            }
+
+            // Match DD/MM/YY or DD/MM/YYYY
+            const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+            if (dmyMatch) {
+                const day = dmyMatch[1].padStart(2, '0');
+                const month = dmyMatch[2].padStart(2, '0');
+                let yNum = parseInt(dmyMatch[3], 10);
+                if (yNum >= 100) {
+                    if (yNum < 2500) yNum += 543;
+                    yNum = parseInt(String(yNum).slice(-2), 10);
+                }
+                const year = String(yNum).padStart(2, '0');
+                return `${day}/${month}/${year}${time ? ' ' + time : ''}`.trim();
+            }
+
+            // Fallback: strip extra text characters
+            const cleanStr = str.replace(/[a-zA-Z]+/g, '').trim();
+            return `${cleanStr}${time ? ' ' + time : ''}`.trim();
+        }
+
         // Initialize Default Date & Time values
         function initDateTimeDefaults() {
             const now = new Date();
@@ -841,6 +893,55 @@
                 fetchDataFromGoogleSheets();
             }
         });
+
+        // Tab Navigation Switcher
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('text-brand-700', 'bg-brand-50', 'border', 'border-brand-200');
+                btn.classList.add('text-slate-600');
+            });
+            document.querySelectorAll('.mobile-tab-btn').forEach(btn => {
+                btn.classList.remove('text-brand-600', 'font-bold');
+                btn.classList.add('text-slate-600');
+            });
+
+            const targetTab = document.getElementById(`tab-${tabName}`);
+            if (targetTab) targetTab.classList.add('active');
+
+            const desktopBtn = document.getElementById(`tab-btn-${tabName}`);
+            if (desktopBtn) {
+                desktopBtn.classList.add('text-brand-700', 'bg-brand-50', 'border', 'border-brand-200');
+                desktopBtn.classList.remove('text-slate-600');
+            }
+
+            const mobileBtn = document.getElementById(`mobile-tab-${tabName}`);
+            if (mobileBtn) {
+                mobileBtn.classList.add('text-brand-600', 'font-bold');
+                mobileBtn.classList.remove('text-slate-600');
+            }
+
+            if (tabName === 'analytics') {
+                renderAnalytics();
+            } else if (tabName === 'report') {
+                renderDoctorReport();
+            } else if (tabName === 'history') {
+                renderHistoryTable();
+            }
+        }
+
+        // Accessibility Toggles
+        function toggleHighContrast() {
+            document.body.classList.toggle('high-contrast');
+            const isHC = document.body.classList.contains('high-contrast');
+            showToast(isHC ? 'เปิดโหมดสีตัดกันสูง (High Contrast)' : 'ปิดโหมดสีตัดกันสูง', 'info');
+        }
+
+        function toggleLargeFont() {
+            document.body.classList.toggle('large-font');
+            const isLF = document.body.classList.contains('large-font');
+            showToast(isLF ? 'เปิดโหมดตัวหนังสือใหญ่' : 'ปิดโหมดตัวหนังสือใหญ่', 'info');
+        }
 
         // PIN Protected Action Modal Logic (Backup, Restore, & Delete)
         function openPinModal(action, extraData = null) {
@@ -1292,6 +1393,19 @@
             renderDoctorReport();
         }
 
+        // Analytics Range Filter Setter
+        function setAnalyticsRange(range) {
+            currentAnalyticsRange = range;
+            document.querySelectorAll('.range-btn').forEach(btn => {
+                btn.className = "range-btn px-4 py-2 rounded-xl text-sm font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200";
+            });
+            const activeBtn = document.getElementById(`range-${range}`);
+            if (activeBtn) {
+                activeBtn.className = "range-btn px-4 py-2 rounded-xl text-sm font-semibold bg-brand-600 text-white";
+            }
+            renderAnalytics();
+        }
+
         // Render Analytics & Charts
         function renderAnalytics() {
             let filteredLogs = [...bpLogs];
@@ -1353,7 +1467,27 @@
             const ctx = chartCanvas.getContext('2d');
             const sortedLogs = [...logs].reverse();
 
-            const labels = sortedLogs.map(l => `${l.date.slice(5)} ${l.time}`);
+            // Format date & time for x-axis compact label (e.g., 31/10 14:00)
+            const labels = sortedLogs.map(l => {
+                let dateStr = '';
+                if (l.date) {
+                    const str = String(l.date).trim().replace(/\s+(Sun|Mon|Tue|Wed|Thu|Fri|Sat|GMT|Indochina).*$/i, '').trim();
+                    if (str.match(/^\d{4}-\d{2}-\d{2}/)) {
+                        const parts = str.slice(0, 10).split('-');
+                        dateStr = `${parseInt(parts[2], 10)}/${parseInt(parts[1], 10)}`;
+                    } else {
+                        const d = new Date(str);
+                        if (!isNaN(d.getTime())) {
+                            dateStr = `${d.getDate()}/${d.getMonth() + 1}`;
+                        } else {
+                            dateStr = str.slice(0, 5);
+                        }
+                    }
+                }
+                const timeStr = l.time ? String(l.time).slice(0, 5) : '';
+                return dateStr ? `${dateStr} ${timeStr}`.trim() : timeStr;
+            });
+
             const sysData = sortedLogs.map(l => l.sys);
             const diaData = sortedLogs.map(l => l.dia);
 
@@ -1392,7 +1526,7 @@
                     },
                     scales: {
                         y: { min: 40, max: 200, ticks: { font: { family: 'Prompt' } } },
-                        x: { ticks: { font: { family: 'Prompt', size: 10 } } }
+                        x: { ticks: { font: { family: 'Prompt', size: 10 }, maxRotation: 30, minRotation: 0 } }
                     }
                 }
             });
@@ -1458,7 +1592,7 @@
                 const info = classifyBP(log.sys, log.dia);
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td class="border border-slate-300 p-2 font-medium">${formatThaiShortDate(log.date)}</td>
+                    <td class="border border-slate-300 p-2 font-medium">${formatCompactDateTime(log.date, log.time)}</td>
                     <td class="border border-slate-300 p-2 text-center font-bold">${log.sys}</td>
                     <td class="border border-slate-300 p-2 text-center font-bold">${log.dia}</td>
                     <td class="border border-slate-300 p-2 text-center">${log.pulse}</td>
@@ -1472,49 +1606,69 @@
 
         // Export Data as CSV File
         function exportToCSV() {
-            let csv = "\uFEFFLog_ID,Timestamp,Log_Date,Log_Time,Systolic,Diastolic,Pulse,Context_Tag,MAP,Pulse_Pressure,Status_Color,Notes\n";
-            
+            if (bpLogs.length === 0) {
+                showToast('ไม่มีข้อมูลสำหรับส่งออก', 'error');
+                return;
+            }
+            let csvContent = "\uFEFF"; // UTF-8 BOM
+            csvContent += "Log_ID,Date,Time,Systolic,Diastolic,Pulse,Tag,MAP,Pulse_Pressure,Status,Notes\n";
             bpLogs.forEach(l => {
-                csv += `"${l.id}","${l.timestamp}","${l.date}","${l.time}",${l.sys},${l.dia},${l.pulse},"${l.tag}",${l.map},${l.pp},"${l.status}","${l.notes.replace(/"/g, '""')}"\n`;
+                const row = [
+                    `"${l.id}"`,
+                    `"${l.date}"`,
+                    `"${l.time}"`,
+                    l.sys,
+                    l.dia,
+                    l.pulse,
+                    `"${l.tag}"`,
+                    l.map,
+                    l.pp,
+                    `"${l.status}"`,
+                    `"${(l.notes || '').replace(/"/g, '""')}"`
+                ];
+                csvContent += row.join(",") + "\n";
             });
-
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `BP_Report_${appSettings.userName}_${new Date().toISOString().slice(0,10)}.csv`;
+            a.download = `BP_Logs_${appSettings.userName}_${new Date().toISOString().slice(0, 10)}.csv`;
             a.click();
             URL.revokeObjectURL(url);
-            showToast('ดาวน์โหลดไฟล์ CSV เรียบร้อยแล้ว', 'success');
+            showToast('ส่งออกไฟล์ CSV เรียบร้อยแล้ว', 'success');
         }
 
-        // Generate ICS Calendar File for Phone Reminders
+        // Generate ICS Calendar File
         function generateICSFile() {
-            const mTime = appSettings.morningTime.replace(':', '') + '00';
-            const eTime = appSettings.eveningTime.replace(':', '') + '00';
+            const morningTime = (appSettings.morningTime || '07:30').replace(':', '');
+            const eveningTime = (appSettings.eveningTime || '20:00').replace(':', '');
+            const now = new Date();
+            const dateStr = now.toISOString().replace(/[-:]/g, '').slice(0, 8);
             
-            const icsContent = 
-`BEGIN:VCALENDAR
+            const icsContent = `BEGIN:VCALENDAR
 VERSION:2.0
-PRODID:-//Senior Care BP Tracker//TH
+PRODID:-//BP Senior Care Phetchaburi//TH
+CALSCALE:GREGORIAN
 BEGIN:VEVENT
 SUMMARY:⏰ ได้เวลาวัดความดันโลหิต (รอบเช้า)
-DESCRIPTION:กรุณาวัดความดันโลหิตและกดบันทึกข้อมูลเข้าสู่ระบบ
+DESCRIPTION:กรุณาวัดความดันโลหิตและบันทึกข้อมูลเข้าสู่ระบบ
+DTSTART:${dateStr}T${morningTime}00
 RRULE:FREQ=DAILY
 BEGIN:VALARM
-TRIGGER:-PT10M
 ACTION:DISPLAY
-DESCRIPTION:ได้เวลาวัดความดันแล้วครับ
+DESCRIPTION:ได้เวลาวัดความดันโลหิตแล้ว
+TRIGGER:-PT10M
 END:VALARM
 END:VEVENT
 BEGIN:VEVENT
 SUMMARY:⏰ ได้เวลาวัดความดันโลหิต (รอบเย็น)
-DESCRIPTION:กรุณาวัดความดันโลหิตและกดบันทึกข้อมูลเข้าสู่ระบบ
+DESCRIPTION:กรุณาวัดความดันโลหิตและบันทึกข้อมูลเข้าสู่ระบบ
+DTSTART:${dateStr}T${eveningTime}00
 RRULE:FREQ=DAILY
 BEGIN:VALARM
-TRIGGER:-PT10M
 ACTION:DISPLAY
-DESCRIPTION:ได้เวลาวัดความดันแล้วครับ
+DESCRIPTION:ได้เวลาวัดความดันโลหิตแล้ว
+TRIGGER:-PT10M
 END:VALARM
 END:VEVENT
 END:VCALENDAR`;
@@ -1523,21 +1677,15 @@ END:VCALENDAR`;
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `BP_Reminder_Google_Calendar.ics`;
+            a.download = 'BP_Reminder_Daily.ics';
             a.click();
             URL.revokeObjectURL(url);
-            showToast('ดาวน์โหลดไฟล์การแจ้งเตือนปฏิทินเรียบร้อย', 'success');
+            showToast('สร้างและดาวน์โหลดไฟล์แจ้งเตือน (.ics) เรียบร้อยแล้ว', 'success');
         }
 
         // Copy GAS Script to Clipboard
         function copyGASScript() {
-            const scriptCode = 
-`// ==========================================
-// Google Apps Script (GAS) สำหรับตารางความดัน
-// Sheet ID: ${document.getElementById('sheetIdInput').value}
-// ==========================================
-
-function doPost(e) {
+            const scriptCode = `function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("BP_Logs");
@@ -1545,26 +1693,7 @@ function doPost(e) {
       sheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet("BP_Logs");
       sheet.appendRow(["Log_ID", "Timestamp", "Log_Date", "Log_Time", "Systolic", "Diastolic", "Pulse", "Context_Tag", "MAP", "Pulse_Pressure", "Status_Color", "Notes"]);
     }
-    
-    sheet.appendRow([
-      data.id,
-      data.timestamp,
-      data.date,
-      data.time,
-      data.sys,
-      data.dia,
-      data.pulse,
-      data.tag,
-      data.map,
-      data.pp,
-      data.status,
-      data.notes
-    ]);
-
-    if (data.status === 'CRITICAL' || data.status === 'RED') {
-      sendEmergencyEmail(data);
-    }
-
+    sheet.appendRow([data.id, data.timestamp, data.date, data.time, data.sys, data.dia, data.pulse, data.tag, data.map, data.pp, data.status, data.notes]);
     return ContentService.createTextOutput(JSON.stringify({status: "success"})).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({status: "error", message: err.toString()})).setMimeType(ContentService.MimeType.JSON);
@@ -1574,50 +1703,33 @@ function doPost(e) {
 function doGet(e) {
   try {
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("BP_Logs");
-    if (!sheet) {
-      return ContentService.createTextOutput(JSON.stringify([])).setMimeType(ContentService.MimeType.JSON);
-    }
+    if (!sheet) return ContentService.createTextOutput(JSON.stringify([])).setMimeType(ContentService.MimeType.JSON);
     var data = sheet.getDataRange().getValues();
-    if (data.length <= 1) {
-      return ContentService.createTextOutput(JSON.stringify([])).setMimeType(ContentService.MimeType.JSON);
-    }
     var result = [];
     for (var i = data.length - 1; i >= 1; i--) {
       var row = data[i];
+      if (!row[0]) continue;
       result.push({
-        id: String(row[0]),
-        timestamp: String(row[1]),
-        date: String(row[2]).slice(0, 10),
-        time: String(row[3]),
-        sys: Number(row[4]),
-        dia: Number(row[5]),
-        pulse: Number(row[6]),
-        tag: String(row[7]),
-        map: Number(row[8]),
-        pp: Number(row[9]),
-        status: String(row[10]),
-        notes: String(row[11])
+        id: String(row[0]), timestamp: String(row[1]), date: String(row[2]), time: String(row[3]),
+        sys: Number(row[4]), dia: Number(row[5]), pulse: Number(row[6]), tag: String(row[7]),
+        map: Number(row[8]), pp: Number(row[9]), status: String(row[10]), notes: String(row[11])
       });
     }
     return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({error: err.toString()})).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify([])).setMimeType(ContentService.MimeType.JSON);
   }
 }`;
-
-            const textArea = document.createElement("textarea");
-            textArea.value = scriptCode;
-            document.body.appendChild(textArea);
-            textArea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textArea);
-            
-            showToast('คัดลอกโค้ด Google Apps Script เรียบร้อยแล้ว', 'success');
+            navigator.clipboard.writeText(scriptCode).then(() => {
+                showToast('คัดลอกสคริปต์ Google Apps Script สำเร็จ', 'success');
+            }).catch(() => {
+                showToast('ไม่สามารถคัดลอกอัตโนมัติได้', 'error');
+            });
         }
 
         // Settings Modal Handlers
         function openSettingsModal() {
-            document.getElementById('gasUrlInput').value = appSettings.gasUrl;
+            document.getElementById('gasUrlInput').value = appSettings.gasUrl || '';
             document.getElementById('settingsModal').classList.remove('hidden');
         }
 
@@ -1630,18 +1742,21 @@ function doGet(e) {
             localStorage.setItem('bp_app_settings', JSON.stringify(appSettings));
             closeSettingsModal();
             showToast('บันทึก Web App URL เรียบร้อยแล้ว', 'success');
+            if (appSettings.gasUrl) {
+                fetchDataFromGoogleSheets();
+            }
         }
 
         function loadSettingsToUI() {
-            document.getElementById('settingUserName').value = appSettings.userName;
-            document.getElementById('settingUserEmail').value = appSettings.userEmail;
-            document.getElementById('settingCaregiverEmail').value = appSettings.caregiverEmail;
-            document.getElementById('settingMorningTime').value = appSettings.morningTime;
-            document.getElementById('settingEveningTime').value = appSettings.eveningTime;
+            document.getElementById('settingUserName').value = appSettings.userName || '';
+            document.getElementById('settingUserEmail').value = appSettings.userEmail || '';
+            document.getElementById('settingCaregiverEmail').value = appSettings.caregiverEmail || '';
+            document.getElementById('settingMorningTime').value = appSettings.morningTime || '07:30';
+            document.getElementById('settingEveningTime').value = appSettings.eveningTime || '20:00';
         }
 
         function saveCalendarSettings() {
-            appSettings.userName = document.getElementById('settingUserName').value.trim() || 'ผู้ใช้งาน';
+            appSettings.userName = document.getElementById('settingUserName').value.trim() || 'คุณตาประเสริฐ';
             appSettings.userEmail = document.getElementById('settingUserEmail').value.trim();
             appSettings.caregiverEmail = document.getElementById('settingCaregiverEmail').value.trim();
             appSettings.morningTime = document.getElementById('settingMorningTime').value;
@@ -1649,92 +1764,37 @@ function doGet(e) {
 
             localStorage.setItem('bp_app_settings', JSON.stringify(appSettings));
             renderDoctorReport();
-            showToast('บันทึกข้อมูลและเวลาแจ้งเตือนเรียบร้อยแล้ว', 'success');
+            showToast('บันทึกการตั้งค่าผู้ใช้งานเรียบร้อยแล้ว', 'success');
         }
 
-        // Range Filter Switcher
-        function setAnalyticsRange(range) {
-            currentAnalyticsRange = range;
-            document.querySelectorAll('.range-btn').forEach(btn => {
-                btn.className = "range-btn px-4 py-2 rounded-xl text-sm font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200";
-            });
-            document.getElementById(`range-${range}`).className = "range-btn px-4 py-2 rounded-xl text-sm font-semibold bg-brand-600 text-white";
-            renderAnalytics();
-        }
-
-        // Tab Switcher
-        function switchTab(tabId) {
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-            const activeTab = document.getElementById(`tab-${tabId}`);
-            if (activeTab) activeTab.classList.add('active');
-
-            // Update Desktop Tab Buttons
-            document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.className = "tab-btn flex-1 py-3 px-4 rounded-xl font-semibold text-center transition flex items-center justify-center gap-2 text-slate-600 hover:bg-slate-50";
-            });
-            const activeDesktopBtn = document.getElementById(`tab-btn-${tabId}`);
-            if (activeDesktopBtn) {
-                activeDesktopBtn.className = "tab-btn flex-1 py-3 px-4 rounded-xl font-semibold text-center transition flex items-center justify-center gap-2 text-brand-700 bg-brand-50 border border-brand-200";
-            }
-
-            // Update Mobile Bottom Nav Buttons
-            document.querySelectorAll('.mobile-tab-btn').forEach(btn => {
-                btn.className = "mobile-tab-btn flex-1 flex flex-col items-center justify-center h-full text-slate-500 font-medium";
-            });
-            const activeMobileBtn = document.getElementById(`mobile-tab-${tabId}`);
-            if (activeMobileBtn) {
-                activeMobileBtn.className = "mobile-tab-btn flex-1 flex flex-col items-center justify-center h-full text-brand-600 font-bold";
-            }
-
-            // Trigger chart resize on tab reveal
-            if (tabId === 'analytics' && trendChartInstance) {
-                setTimeout(() => {
-                    trendChartInstance.resize();
-                    pieChartInstance.resize();
-                }, 100);
-            }
-        }
-
-        // Accessibility Toggles
-        function toggleHighContrast() {
-            document.body.classList.toggle('high-contrast');
-            const isHc = document.body.classList.contains('high-contrast');
-            showToast(isHc ? 'เปิดโหมดสีตัดกันสูง' : 'ปิดโหมดสีตัดกันสูง', 'info');
-        }
-
-        function toggleLargeFont() {
-            document.body.classList.toggle('large-font');
-            const isLf = document.body.classList.contains('large-font');
-            showToast(isLf ? 'ขยายขนาดตัวหนังสือเรียบร้อย' : 'ขนาดตัวหนังสือปกติ', 'info');
-        }
-
-        // Custom Toast Dialog
-        function showToast(message, type = 'success') {
+        // Toast Notification System
+        function showToast(message, type = 'info') {
             const toast = document.getElementById('toast');
             const toastTitle = document.getElementById('toastTitle');
-            const toastMsg = document.getElementById('toastMessage');
+            const toastMessage = document.getElementById('toastMessage');
             const toastIcon = document.getElementById('toastIcon');
 
             if (!toast) return;
 
-            toastMsg.innerText = message;
-
-            if (type === 'error') {
-                toastTitle.innerText = 'ข้อผิดพลาด / คำเตือน';
-                toastIcon.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-red-400"></i>`;
-            } else if (type === 'info') {
-                toastTitle.innerText = 'แจ้งสถานะ';
-                toastIcon.innerHTML = `<i class="fa-solid fa-circle-info text-blue-400"></i>`;
-            } else {
+            toastMessage.innerText = message;
+            if (type === 'success') {
                 toastTitle.innerText = 'สำเร็จ';
-                toastIcon.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400"></i>`;
+                toastIcon.className = 'text-2xl text-emerald-400';
+                toastIcon.innerHTML = '<i class="fa-solid fa-circle-check"></i>';
+            } else if (type === 'error') {
+                toastTitle.innerText = 'แจ้งเตือนข้อผิดพลาด';
+                toastIcon.className = 'text-2xl text-red-400';
+                toastIcon.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i>';
+            } else {
+                toastTitle.innerText = 'การแจ้งเตือน';
+                toastIcon.className = 'text-2xl text-blue-400';
+                toastIcon.innerHTML = '<i class="fa-solid fa-circle-info"></i>';
             }
 
             toast.classList.remove('translate-x-full');
-
             setTimeout(() => {
                 toast.classList.add('translate-x-full');
-            }, 3000);
+            }, 3500);
         }
     </script>
 </body>
