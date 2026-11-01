@@ -748,7 +748,8 @@
             <div class="space-y-4 text-sm">
                 <div>
                     <label class="block font-semibold text-slate-700 mb-1">Google Sheet ID ที่เชื่อมโยง:</label>
-                    <input type="text" id="sheetIdInput" readonly value="1ojDiLwNbpnsejoiIab56asDeGe6L76BqyTU1OTTNNS8" class="w-full bg-slate-100 p-2.5 rounded-xl border border-slate-300 font-mono text-xs text-slate-600">
+                    <input type="text" id="sheetIdInput" placeholder="ใส่ Google Sheet ID..." class="w-full p-2.5 rounded-xl border border-slate-300 font-mono text-xs focus:outline-none focus:border-brand-500">
+                    <span class="text-xs text-slate-500 mt-1 block">ระบุ ID ของ Google Sheet (ข้อความใน URL ของชีตช่วงระหว่าง /d/ และ /edit)</span>
                 </div>
 
                 <div>
@@ -785,6 +786,7 @@
             caregiverEmail: 'doctor.relative@gmail.com',
             morningTime: '07:30',
             eveningTime: '20:00',
+            sheetId: '1ojDiLwNbpnsejoiIab56asDeGe6L76BqyTU1OTTNNS8',
             gasUrl: 'https://script.google.com/macros/s/AKfycbwaNu8tr9V1AvCHGvMQ-GPhx7pvQMeOZHi4GKrzsa017fmQuvo4gBbN9B95zviMGtuA/exec'
         };
 
@@ -1096,60 +1098,32 @@
             bpLogs = bpLogs.filter(l => l.id !== id);
             localStorage.setItem('bp_logs_data', JSON.stringify(bpLogs));
             renderAllViews();
+            deleteFromGoogleSheets(id);
             showToast('ลบรายการบันทึกเรียบร้อยแล้ว', 'info');
         }
 
-        // Backup to JSON File
-        function executeBackup() {
-            const backupData = {
-                app: 'BP Senior Care (ความดันโลหิต เพชรเจริญ)',
-                exportedAt: new Date().toISOString(),
-                settings: appSettings,
-                logs: bpLogs
-            };
+        async function deleteFromGoogleSheets(id) {
+            if (!appSettings.gasUrl) return;
 
-            const jsonStr = JSON.stringify(backupData, null, 2);
-            const blob = new Blob([jsonStr], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `BP_Backup_${appSettings.userName}_${new Date().toISOString().slice(0, 10)}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
+            const syncDot = document.getElementById('syncDot');
+            const syncText = document.getElementById('syncStatusText');
+            
+            if (syncDot) syncDot.className = "w-3 h-3 rounded-full bg-amber-500 inline-block animate-ping";
+            if (syncText) syncText.innerText = "กำลังลบข้อมูลใน Google Sheet...";
 
-            showToast('สำรองข้อมูล (Backup) เรียบร้อยแล้ว', 'success');
-        }
-
-        // Restore from JSON File
-        function handleRestoreFile(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const restoredData = JSON.parse(e.target.result);
-                    if (!restoredData.logs || !Array.isArray(restoredData.logs)) {
-                        showToast('รูปแบบไฟล์สำรองไม่ถูกต้อง', 'error');
-                        return;
-                    }
-
-                    bpLogs = restoredData.logs;
-                    if (restoredData.settings) {
-                        appSettings = { ...appSettings, ...restoredData.settings };
-                        localStorage.setItem('bp_app_settings', JSON.stringify(appSettings));
-                        loadSettingsToUI();
-                    }
-
-                    localStorage.setItem('bp_logs_data', JSON.stringify(bpLogs));
-                    renderAllViews();
-                    showToast(`กู้คืนข้อมูลสำเร็จเรียบร้อย (${bpLogs.length} รายการ)`, 'success');
-                } catch (err) {
-                    showToast('เกิดข้อผิดพลาดในการอ่านไฟล์สำรอง', 'error');
-                }
-            };
-            reader.readAsText(file);
-            event.target.value = '';
+            try {
+                await fetch(appSettings.gasUrl, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'delete', id: id })
+                });
+                if (syncDot) syncDot.className = "w-3 h-3 rounded-full bg-emerald-500 inline-block";
+                if (syncText) syncText.innerText = "ซิงค์กับ Google Sheet แล้ว (ลบเรียบร้อย)";
+            } catch (err) {
+                if (syncDot) syncDot.className = "w-3 h-3 rounded-full bg-red-500 inline-block";
+                if (syncText) syncText.innerText = "การซิงค์ติดขัดในการลบ";
+            }
         }
 
         // Adjust input (+ / - buttons)
@@ -1729,6 +1703,7 @@ function doGet(e) {
 
         // Settings Modal Handlers
         function openSettingsModal() {
+            document.getElementById('sheetIdInput').value = appSettings.sheetId || '1ojDiLwNbpnsejoiIab56asDeGe6L76BqyTU1OTTNNS8';
             document.getElementById('gasUrlInput').value = appSettings.gasUrl || '';
             document.getElementById('settingsModal').classList.remove('hidden');
         }
@@ -1738,10 +1713,11 @@ function doGet(e) {
         }
 
         function saveSettingsModal() {
+            appSettings.sheetId = document.getElementById('sheetIdInput').value.trim() || '1ojDiLwNbpnsejoiIab56asDeGe6L76BqyTU1OTTNNS8';
             appSettings.gasUrl = document.getElementById('gasUrlInput').value.trim();
             localStorage.setItem('bp_app_settings', JSON.stringify(appSettings));
             closeSettingsModal();
-            showToast('บันทึก Web App URL เรียบร้อยแล้ว', 'success');
+            showToast('บันทึกตั้งค่าเรียบร้อยแล้ว', 'success');
             if (appSettings.gasUrl) {
                 fetchDataFromGoogleSheets();
             }
